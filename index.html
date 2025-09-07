@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JPEG Metadata Extractor with ExifTool</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f2f5;
+            color: #333;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 28px;
+            color: #1c1e21;
+        }
+        .upload-section {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 30px;
+            border: 2px dashed #ddd;
+            border-radius: 8px;
+            background-color: #fafafa;
+        }
+        input[type="file"] {
+            margin-bottom: 20px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: white;
+        }
+        .button-group {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        button {
+            background-color: #1877f2;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            min-width: 200px;
+        }
+        button:hover {
+            background-color: #166fe5;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        .secondary-btn {
+            background-color: #42b883;
+        }
+        .secondary-btn:hover {
+            background-color: #369870;
+        }
+        .results {
+            margin-top: 30px;
+            display: none;
+        }
+        .results.show {
+            display: block;
+        }
+        pre {
+            background-color: #f8f8f8;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            font-size: 12px;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        .loading.show {
+            display: block;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #1877f2;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 15px 0;
+            border: 1px solid #f5c6cb;
+        }
+        .info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 15px 0;
+            border: 1px solid #bee5eb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📸 JPEG Metadata Extractor with ExifTool</h1>
+        <p style="text-align: center; margin-bottom: 30px; color: #666;">
+            Upload a JPEG image to extract complete metadata including makernotes, EXIF data, and more.
+        </p>
+        
+        <div class="upload-section">
+            <input type="file" id="imageFile" accept="image/jpeg,image/jpg,.jpg,.jpeg" required>
+            <br>
+            <div class="button-group">
+                <button onclick="uploadFile('/upload')" id="rawBtn">
+                    Extract Raw Metadata + Makernotes
+                </button>
+                <button onclick="uploadFile('/upload-readable')" id="readableBtn" class="secondary-btn">
+                    Extract Readable Metadata
+                </button>
+            </div>
+        </div>
+
+        <div class="info">
+            <strong>📋 What you'll get:</strong>
+            <ul style="text-align: left; margin: 10px 0 0 20px;">
+                <li><strong>Raw Metadata:</strong> Complete technical data including makernotes, camera settings, and all available tags</li>
+                <li><strong>Readable Metadata:</strong> Human-friendly format with descriptions and organized groups</li>
+            </ul>
+        </div>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Processing image and extracting metadata...</p>
+        </div>
+
+        <div class="results" id="results">
+            <h3 id="resultsTitle"></h3>
+            <pre id="resultsContent"></pre>
+        </div>
+    </div>
+
+    <script>
+        async function uploadFile(endpoint) {
+            const fileInput = document.getElementById('imageFile');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                alert('Please select a JPEG file first.');
+                return;
+            }
+
+            // Check if it's a JPEG file
+            if (!file.type.includes('jpeg') && !file.type.includes('jpg')) {
+                alert('Please select a JPEG file only.');
+                return;
+            }
+
+            const loading = document.getElementById('loading');
+            const results = document.getElementById('results');
+            const rawBtn = document.getElementById('rawBtn');
+            const readableBtn = document.getElementById('readableBtn');
+            
+            // Show loading state
+            loading.classList.add('show');
+            results.classList.remove('show');
+            rawBtn.disabled = true;
+            readableBtn.disabled = true;
+            
+            const formData = new FormData();
+            formData.append('image', file);
+
+            try {
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'Upload failed');
+                }
+
+                // Show results
+                document.getElementById('resultsTitle').textContent = 
+                    endpoint === '/upload' ? 'Raw Metadata + Makernotes:' : 'Readable Metadata:';
+                document.getElementById('resultsContent').textContent = 
+                    JSON.stringify(data, null, 2);
+                results.classList.add('show');
+                
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('resultsTitle').textContent = 'Error:';
+                document.getElementById('resultsContent').textContent = error.message;
+                results.classList.add('show');
+            } finally {
+                // Hide loading state
+                loading.classList.remove('show');
+                rawBtn.disabled = false;
+                readableBtn.disabled = false;
+            }
+        }
+
+        // Allow drag and drop
+        const uploadSection = document.querySelector('.upload-section');
+        const fileInput = document.getElementById('imageFile');
+
+        uploadSection.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadSection.style.borderColor = '#1877f2';
+            uploadSection.style.backgroundColor = '#f0f8ff';
+        });
+
+        uploadSection.addEventListener('dragleave', () => {
+            uploadSection.style.borderColor = '#ddd';
+            uploadSection.style.backgroundColor = '#fafafa';
+        });
+
+        uploadSection.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadSection.style.borderColor = '#ddd';
+            uploadSection.style.backgroundColor = '#fafafa';
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                fileInput.files = files;
+            }
+        });
+    </script>
+</body>
+</html>
